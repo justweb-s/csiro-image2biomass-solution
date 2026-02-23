@@ -1,0 +1,33 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# local env
+.env
+.venv/
+venv/
+
+# datasets / outputs
+/data/
+/models/
+/logs/
+/submissions/
+
+# checkpoints
+*.pth
+*.ckpt
+*.pt
+*.bin
+*.safetensors
+
+# local settings (paths)
+SETTINGS.json
+
+# artifacts
+final-solution.zip
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,11 @@
+.
+./artifacts
+./backbone
+./backbone/dinov3-vit7b-backbone
+./data
+./data/raw
+./data/processed
+./logs
+./models
+./models/checkpoints
+./submissions
