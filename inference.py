@@ -13,23 +13,38 @@ from albumentations.pytorch import ToTensorV2
 from tqdm.auto import tqdm
 
 # =========================================================================
-# 0. PULIZIA AMBIENTE (KILL CONFLICTS)
+# 0. OPTIONAL KAGGLE ENVIRONMENT SETUP
 # =========================================================================
-print("🧹 Pulizia ambiente dai conflitti (TensorFlow/TensorBoard)...")
-pkgs_to_remove = ["tensorflow", "tensorboard", "flax", "keras"]
-devnull = open(os.devnull, 'w')
-for pkg in pkgs_to_remove:
-    subprocess.run(
-        [sys.executable, "-m", "pip", "uninstall", "-y", pkg], 
-        stdout=devnull, stderr=subprocess.PIPE
-    )
-devnull.close()
+def _str_to_bool(v: str) -> bool:
+    return str(v).strip().lower() in ("1", "true", "yes", "y")
 
-os.environ["USE_TORCH"] = "1"
-os.environ["USE_TF"] = "0"
-os.environ["USE_FLAX"] = "0"
-os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
-os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+def _default_enable_kaggle_setup() -> bool:
+    return Path("/kaggle").exists() or os.environ.get("KAGGLE_URL_BASE") is not None
+
+_env_flag = os.environ.get("CSIRO_ENABLE_KAGGLE_SETUP")
+ENABLE_KAGGLE_SETUP = _default_enable_kaggle_setup() if _env_flag is None else _str_to_bool(_env_flag)
+
+os.environ.setdefault("USE_TORCH", "1")
+os.environ.setdefault("USE_TF", "0")
+os.environ.setdefault("USE_FLAX", "0")
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+
+if ENABLE_KAGGLE_SETUP:
+    print("Kaggle environment setup enabled (optional dependency cleanup/install).")
+    os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
+
+    print("Cleaning conflicting packages (TensorFlow/TensorBoard)...")
+    pkgs_to_remove = ["tensorflow", "tensorboard", "flax", "keras"]
+    devnull = open(os.devnull, "w")
+    for pkg in pkgs_to_remove:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "uninstall", "-y", pkg],
+            stdout=devnull,
+            stderr=subprocess.PIPE,
+        )
+    devnull.close()
+else:
+    print("Kaggle environment setup disabled; assuming dependencies are already installed.")
 
 # =========================================================================
 # 1. SEEDING & SETUP
@@ -48,7 +63,7 @@ LIB_DIR = Path("/kaggle/input/csiro-inference-libraries")
 sys.path.append(str(LIB_DIR))
 
 # =========================================================================
-# 2. INSTALLAZIONE CHIRURGICA
+# 2. OPTIONAL "SURGICAL" INSTALL (KAGGLE)
 # =========================================================================
 wheels_to_install = [
     "bitsandbytes-0.49.0-py3-none-manylinux_2_24_x86_64.whl",
@@ -60,34 +75,38 @@ wheels_to_install = [
     "transformers-4.57.3-py3-none-any.whl"
 ]
 
-print("📦 Inizio installazione chirurgica (No-Deps)...")
-devnull = open(os.devnull, 'w')
+if ENABLE_KAGGLE_SETUP:
+    print("Starting optional wheel installation (no-deps, force reinstall)...")
+    devnull = open(os.devnull, "w")
 
-for whl in wheels_to_install:
-    path = LIB_DIR / whl
-    if not path.exists():
-        print(f"⚠️ ATTENZIONE: {whl} non trovato, salto.")
-        continue
-    
-    cmd = [
-        sys.executable, "-m", "pip", "install", 
-        str(path), 
-        "--no-deps", 
-        "--force-reinstall",
-        "--quiet"
-    ]
-    try:
-        subprocess.run(cmd, check=True, stdout=devnull, stderr=subprocess.PIPE)
-        print(f"✅ Installato: {whl}")
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Errore inst {whl}: {e}")
+    for whl in wheels_to_install:
+        path = LIB_DIR / whl
+        if not path.exists():
+            print(f"WARNING: {whl} not found under {LIB_DIR}; skipping.")
+            continue
+ 
+        cmd = [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            str(path),
+            "--no-deps",
+            "--force-reinstall",
+            "--quiet",
+        ]
+        try:
+            subprocess.run(cmd, check=True, stdout=devnull, stderr=subprocess.PIPE)
+            print(f"Installed: {whl}")
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR installing {whl}: {e}")
 
-devnull.close()
+    devnull.close()
 
 # =========================================================================
-# 3. IMPORT FINALI (SOLO ORA CARICHIAMO TORCH/TRANSFORMERS)
+# 3. FINAL IMPORTS (IMPORT TORCH/TRANSFORMERS AFTER OPTIONAL SETUP)
 # =========================================================================
-print("\n🎉 Importazione librerie...")
+print("\nImporting libraries...")
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
@@ -102,24 +121,24 @@ seed_everything(123)
 print(f"BitsAndBytes version: {bitsandbytes.__version__}")
 print(f"Transformers version: {transformers.__version__}")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Device rilevato: {device}")
+print(f"Detected device: {device}")
 
 # ============================================================
-# 4. CONFIGURAZIONE DATA & MODELLI
+# 4. DATA & MODEL CONFIGURATION
 # ============================================================
 
-# --- PERCORSI ---
+# --- PATHS ---
 DATA_DIR = Path("/kaggle/input/csiro-biomass")
 BACKBONE_PATH = "/kaggle/input/dinov3-vit7b-backbone" 
-
-# Modelli Base
+ 
+# Base models
 MODEL_PATH_BASE_1 = Path("/kaggle/input/dinov3-swa-full-fit-768px/dinov3_full_SWA.pth")
 MODEL_PATH_BASE_2 = Path("/kaggle/input/dinov3-mse-768px/dinov3_full_SWA.pth")
-
-# Modelli Specialista (High Biomass)
+ 
+# Specialist models (high biomass)
 MODEL_PATH_SPEC_1 = Path("/kaggle/input/dinov3-high-specialist-768px/dinov3_high_specialist.pth")
 MODEL_PATH_SPEC_2 = Path("/kaggle/input/dinov3-high-specialist-swa/dinov3_high_specialist_swa.pth")
-# --- NUOVO MODELLO SPECIALISTA AGGIUNTO ---
+# Additional specialist model
 MODEL_PATH_SPEC_3 = Path("/kaggle/input/dinov3-mse-high-specialist-768px/dinov3_high_specialist.pth")
 
 IMG_SIZE = 768
@@ -171,7 +190,7 @@ class TestBiomassThreeStreamDataset(Dataset):
         return left_t, center_t, right_t
 
 # ============================================================
-# 6. ARCHITETTURA MODELLO
+# 6. MODEL ARCHITECTURE
 # ============================================================
 
 class GeM(nn.Module):
@@ -243,15 +262,15 @@ class Dinov3Inference(nn.Module):
         return self.head_targets(fused)
 
 # ============================================================
-# 7. FUNZIONE DI INFERENZA SEQUENZIALE
+# 7. INFERENCE HELPER
 # ============================================================
 
 def get_predictions(model_path, dataloader, model_name="Model"):
-    print(f"\n--- Elaborazione: {model_name} ---")
-    print(f"📂 Caricamento pesi da: {model_path.name}")
+    print(f"\n--- Running: {model_name} ---")
+    print(f"Loading weights from: {model_path.name}")
     
     if not model_path.exists():
-        print(f"⚠️ PATH NON TROVATO: {model_path}")
+        print(f"WARNING: path not found: {model_path}")
         return None
 
     model = Dinov3Inference(BACKBONE_PATH)
@@ -271,7 +290,7 @@ def get_predictions(model_path, dataloader, model_name="Model"):
     
     with torch.no_grad():
         with torch.amp.autocast('cuda'):
-            for img_l, img_c, img_r in tqdm(dataloader, desc=f"Inferenza {model_name}"):
+            for img_l, img_c, img_r in tqdm(dataloader, desc=f"Inference {model_name}"):
                 img_l = img_l.to(device)
                 img_c = img_c.to(device)
                 img_r = img_r.to(device)
@@ -287,136 +306,141 @@ def get_predictions(model_path, dataloader, model_name="Model"):
     return np.concatenate(preds_list, axis=0)
 
 # ============================================================
-# 8. ESECUZIONE PRINCIPALE & LOGICA ENSEMBLE
+# 8. MAIN EXECUTION & ENSEMBLE LOGIC
 # ============================================================
 
-try:
-    # --- SETUP DATI ---
-    test_long = pd.read_csv(DATA_DIR / "test.csv")
-    test_unique = test_long.drop_duplicates("image_path").reset_index(drop=True)
-    TEST_IMG_DIR = DATA_DIR / "test"
-    
-    ds = TestBiomassThreeStreamDataset(test_unique, TEST_IMG_DIR, test_transform)
-    
-    # IMPORTANTE: num_workers=0 evita il deadlock dei thread e gli errori OSError
-    dl = DataLoader(ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+if __name__ == "__main__":
+    try:
+        # --- DATA SETUP ---
+        test_long = pd.read_csv(DATA_DIR / "test.csv")
+        test_unique = test_long.drop_duplicates("image_path").reset_index(drop=True)
+        TEST_IMG_DIR = DATA_DIR / "test"
+ 
+        ds = TestBiomassThreeStreamDataset(test_unique, TEST_IMG_DIR, test_transform)
+ 
+        # IMPORTANT: num_workers=0 avoids deadlocks and OSError issues in some environments
+        dl = DataLoader(ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
 
-    # --- 1. INFERENZA MODELLI BASE ---
-    print("\n>>> Avvio Ensemble Base Models...")
-    preds_b1 = get_predictions(MODEL_PATH_BASE_1, dl, model_name="BASE 1 (Original)")
-    if preds_b1 is None: raise FileNotFoundError(f"Missing {MODEL_PATH_BASE_1}")
-    
-    preds_b2 = get_predictions(MODEL_PATH_BASE_2, dl, model_name="BASE 2 (New NR)")
-    if preds_b2 is None: raise FileNotFoundError(f"Missing {MODEL_PATH_BASE_2}")
+        # --- 1. BASE MODELS ---
+        print("\n>>> Running base ensemble models...")
+        preds_b1 = get_predictions(MODEL_PATH_BASE_1, dl, model_name="BASE 1 (Original)")
+        if preds_b1 is None:
+            raise FileNotFoundError(f"Missing {MODEL_PATH_BASE_1}")
+ 
+        preds_b2 = get_predictions(MODEL_PATH_BASE_2, dl, model_name="BASE 2 (New NR)")
+        if preds_b2 is None:
+            raise FileNotFoundError(f"Missing {MODEL_PATH_BASE_2}")
 
-    print("\n>>> Creazione 'Base Ensemble' (Media Base 1 + Base 2)...")
-    preds_base = (preds_b1 + preds_b2) / 2.0
-    preds_base = np.maximum(0, preds_base) 
+        print("\n>>> Creating base ensemble (mean of BASE 1 + BASE 2)...")
+        preds_base = (preds_b1 + preds_b2) / 2.0
+        preds_base = np.maximum(0, preds_base)
 
-    # --- 2. INFERENZA MODELLI SPECIALISTA ---
-    print("\n>>> Avvio Ensemble Specialist Models (3 Modelli)...")
-    preds_spec_1 = get_predictions(MODEL_PATH_SPEC_1, dl, model_name="SPEC 1 (High Original)")
-    preds_spec_2 = get_predictions(MODEL_PATH_SPEC_2, dl, model_name="SPEC 2 (High MSE)")
-    preds_spec_3 = get_predictions(MODEL_PATH_SPEC_3, dl, model_name="SPEC 3 (High MSE New)") # Nuovo Modello
+        # --- 2. SPECIALIST MODELS ---
+        print("\n>>> Running specialist ensemble models...")
+        preds_spec_1 = get_predictions(MODEL_PATH_SPEC_1, dl, model_name="SPEC 1 (High Original)")
+        preds_spec_2 = get_predictions(MODEL_PATH_SPEC_2, dl, model_name="SPEC 2 (High MSE)")
+        preds_spec_3 = get_predictions(MODEL_PATH_SPEC_3, dl, model_name="SPEC 3 (High MSE New)")
 
-    # Logica Ensemble Specialisti aggiornata per 3 modelli
-    spec_preds_list = []
-    if preds_spec_1 is not None: spec_preds_list.append(preds_spec_1)
-    if preds_spec_2 is not None: spec_preds_list.append(preds_spec_2)
-    if preds_spec_3 is not None: spec_preds_list.append(preds_spec_3)
+        spec_preds_list = []
+        if preds_spec_1 is not None:
+            spec_preds_list.append(preds_spec_1)
+        if preds_spec_2 is not None:
+            spec_preds_list.append(preds_spec_2)
+        if preds_spec_3 is not None:
+            spec_preds_list.append(preds_spec_3)
 
-    if len(spec_preds_list) > 0:
-        print(f"\n>>> Creazione 'Specialist Ensemble' (Media di {len(spec_preds_list)} modelli)...")
-        preds_spec = np.mean(spec_preds_list, axis=0)
-    else:
-        print("⚠️ NESSUN SPECIALISTA! Uso Base.")
-        preds_spec = preds_base.copy()
+        if len(spec_preds_list) > 0:
+            print(f"\n>>> Creating specialist ensemble (mean of {len(spec_preds_list)} models)...")
+            preds_spec = np.mean(spec_preds_list, axis=0)
+        else:
+            print("WARNING: no specialist models available; falling back to base ensemble.")
+            preds_spec = preds_base.copy()
 
-    preds_spec = np.maximum(0, preds_spec)
+        preds_spec = np.maximum(0, preds_spec)
 
-    # ============================================================
-    # NUOVE REGOLE DI POST-PROCESSING
-    # ============================================================
-    print("\n🛠️ Applicazione regole di business agli Specialisti...")
-    
-    # 1. Soglia rumore
-    mask_noise = preds_spec < 0.3
-    n_clipped = np.sum(mask_noise)
-    preds_spec[mask_noise] = 0.0
-    print(f"   -> Valori < 0.3 azzerati: {n_clipped} celle")
+        # ============================================================
+        # POST-PROCESSING RULES
+        # ============================================================
+        print("\nApplying post-processing rules to specialist predictions...")
+ 
+        # 1. Noise threshold
+        mask_noise = preds_spec < 0.3
+        n_clipped = np.sum(mask_noise)
+        preds_spec[mask_noise] = 0.0
+        print(f"   -> Values < 0.3 set to 0: {n_clipped} cells")
 
-    # 2. Cap a 200g per Dry_Total_g
-    IDX_TOTAL = 4
-    mask_cap = preds_spec[:, IDX_TOTAL] > 200.0
-    n_capped = np.sum(mask_cap)
-    preds_spec[mask_cap, IDX_TOTAL] = 200.0
-    print(f"   -> Dry_Total_g > 200 limitati a 200: {n_capped} campioni")
-    
-    # ============================================================
-    # LOGICA DI MERGE
-    # ============================================================
-    print("\n--- Applicazione Logica Ensemble Condizionale ---")
-    
-    THRESHOLD = 55.0 
-    WEIGHT_BASE = 0.0
-    WEIGHT_SPEC = 1.0
-    
-    final_preds = preds_base.copy()
-    
-    mask_high = preds_base[:, IDX_TOTAL] > THRESHOLD
-    count_high = np.sum(mask_high)
-    
-    print(f"Campioni totali: {len(final_preds)}")
-    print(f"Campioni sopra soglia {THRESHOLD}g: {count_high}")
-    
-    if count_high > 0:
-        final_preds[mask_high] = (preds_base[mask_high] * WEIGHT_BASE) + (preds_spec[mask_high] * WEIGHT_SPEC)
-    else:
-        print(">>> Nessun campione sopra soglia. Uso solo predizioni Base Ensemble.")
-        
-    # ============================================================
-    # 7. EXPORT FINALE
-    # ============================================================
-    
-    dry_green  = final_preds[:, 0]
-    dry_dead   = final_preds[:, 1]
-    dry_clover = final_preds[:, 2]
-    gdm        = final_preds[:, 3]
-    dry_total  = final_preds[:, 4]
+        # 2. Cap at 200g for Dry_Total_g
+        IDX_TOTAL = 4
+        mask_cap = preds_spec[:, IDX_TOTAL] > 200.0
+        n_capped = np.sum(mask_cap)
+        preds_spec[mask_cap, IDX_TOTAL] = 200.0
+        print(f"   -> Dry_Total_g > 200 capped to 200: {n_capped} samples")
+ 
+        # ============================================================
+        # MERGE LOGIC
+        # ============================================================
+        print("\n--- Applying conditional ensemble merge ---")
+ 
+        THRESHOLD = 55.0
+        WEIGHT_BASE = 0.0
+        WEIGHT_SPEC = 1.0
+ 
+        final_preds = preds_base.copy()
+ 
+        mask_high = preds_base[:, IDX_TOTAL] > THRESHOLD
+        count_high = np.sum(mask_high)
+ 
+        print(f"Total samples: {len(final_preds)}")
+        print(f"Samples above threshold {THRESHOLD}g: {count_high}")
+ 
+        if count_high > 0:
+            final_preds[mask_high] = (preds_base[mask_high] * WEIGHT_BASE) + (preds_spec[mask_high] * WEIGHT_SPEC)
+        else:
+            print(">>> No samples above threshold. Using base ensemble predictions only.")
+ 
+        # ============================================================
+        # FINAL EXPORT
+        # ============================================================
+ 
+        dry_green  = final_preds[:, 0]
+        dry_dead   = final_preds[:, 1]
+        dry_clover = final_preds[:, 2]
+        gdm        = final_preds[:, 3]
+        dry_total  = final_preds[:, 4]
 
-    gdm_fixed = np.maximum(gdm, dry_green + dry_clover)
-    total_fixed = np.maximum(dry_total, gdm_fixed + dry_dead)
+        gdm_fixed = np.maximum(gdm, dry_green + dry_clover)
+        total_fixed = np.maximum(dry_total, gdm_fixed + dry_dead)
 
-    preds_df = pd.DataFrame({
-        "image_path": test_unique["image_path"],
-        "Dry_Green_g": dry_green,
-        "Dry_Dead_g": dry_dead,
-        "Dry_Clover_g": dry_clover,
-        "GDM_g": gdm_fixed,
-        "Dry_Total_g": total_fixed
-    })
+        preds_df = pd.DataFrame({
+            "image_path": test_unique["image_path"],
+            "Dry_Green_g": dry_green,
+            "Dry_Dead_g": dry_dead,
+            "Dry_Clover_g": dry_clover,
+            "GDM_g": gdm_fixed,
+            "Dry_Total_g": total_fixed,
+        })
 
-    preds_long = preds_df.melt(
-        id_vars=["image_path"],
-        value_vars=TARGET_ORDER,
-        var_name="target_name",
-        value_name="pred_target"
-    )
+        preds_long = preds_df.melt(
+            id_vars=["image_path"],
+            value_vars=TARGET_ORDER,
+            var_name="target_name",
+            value_name="pred_target",
+        )
 
-    submission = test_long.merge(
-        preds_long,
-        on=["image_path", "target_name"],
-        how="left"
-    )
+        submission = test_long.merge(
+            preds_long,
+            on=["image_path", "target_name"],
+            how="left",
+        )
 
-    out_df = submission[["sample_id", "pred_target"]].rename(columns={"pred_target": "target"})
-    out_df["target"] = out_df["target"].fillna(0)
-    out_df.to_csv("submission.csv", index=False)
-    
-    print(f"\n🚀 Submission Ensemble creata con successo!")
-    print(out_df.head())
+        out_df = submission[["sample_id", "pred_target"]].rename(columns={"pred_target": "target"})
+        out_df["target"] = out_df["target"].fillna(0)
+        out_df.to_csv("submission.csv", index=False)
+ 
+        print("\nSubmission file created successfully: submission.csv")
+        print(out_df.head())
 
-except Exception as e:
-    print(f"⚠️ Errore critico: {e}")
-    import traceback
-    traceback.print_exc()
+    except Exception as e:
+        print(f"ERROR: fatal exception: {e}")
+        import traceback
+        traceback.print_exc()

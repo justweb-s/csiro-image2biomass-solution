@@ -35,7 +35,7 @@ ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 # ============================================================
-# 1. IMPORT E CONFIGURAZIONI BASE
+# 1. IMPORTS AND BASE CONFIGURATION
 # ============================================================
 
 import os
@@ -652,7 +652,7 @@ def save_ema_params(ema_model, normal_model, path):
 
     if count > 0:
         torch.save(custom_state_dict, path)
-        print(f"✅ Saved EMA params to {path} ({count} keys)")
+        print(f"Saved EMA params to {path} ({count} keys)")
     else:
         print("Error: no parameters found to save from EMA.")
 

@@ -1,0 +1,8 @@
+{
+   "RAW_DATA_DIR": "./data/raw",
+   "PROCESSED_DATA_DIR": "./data/processed",
+   "ARTIFACTS_DIR": "./artifacts",
+   "MODEL_DIR": "./models",
+   "BACKBONE_DIR": "./backbone/dinov3-vit7b-backbone",
+   "BACKBONE_NAME_OR_PATH": "facebook/dinov3-vit7b16-pretrain-lvd1689m"
+}

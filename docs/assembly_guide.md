@@ -2,13 +2,16 @@
 
 This file explains how to assemble the final **single ZIP archive** required by the competition (training code + trained models + inference notebook).
 
+In this repository, documentation is kept under `docs/` for cleanliness.
+When building the competition ZIP, copy the required documentation files to the ZIP root using the expected filenames.
+
 ## 1) Required files at the top level
 Ensure the ZIP contains these files at the top level:
 - `README.md`
 - `requirements.txt` (exact pinned versions; replace placeholder with your real `pip freeze`)
-- `SETTINGS.json` (single source of I/O paths)
-- `entry_points.md`
-- `directory_structure.txt`
+- `SETTINGS.json` (single source of I/O paths; create it from `SETTINGS.example.json`)
+- `entry_points.md` (copy from `docs/entry_points.md`)
+- `directory_structure.txt` (copy from `docs/directory_structure.txt`)
 - Training scripts:
   - `modelA_and_specialist_train.py`
   - `modelB_and_specialist_train.py`

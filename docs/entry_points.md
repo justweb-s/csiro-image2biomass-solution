@@ -1,6 +1,6 @@
 # Entry points
 
-All scripts must use paths from `SETTINGS.json`.
+All scripts must use paths from `SETTINGS.json`. Create it by copying `SETTINGS.example.json` and adjusting paths.
 
 ## 1) (Optional) Prepare data
 If you want to materialize intermediate files (e.g. train-wide pivot), you can run the training scripts directly; they already perform the required preprocessing.
